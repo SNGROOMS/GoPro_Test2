@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>360 Viewer</title>
+<title>360 Viewer (High Quality)</title>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css"/>
 <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
@@ -20,6 +20,7 @@ html, body {
   height: 100%;
 }
 
+/* UI */
 #controls {
   position: fixed;
   top: 10px;
@@ -29,10 +30,12 @@ html, body {
   padding: 10px;
   border-radius: 10px;
   z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 button {
-  margin: 0 5px;
   padding: 8px 12px;
   cursor: pointer;
 }
@@ -57,56 +60,106 @@ button {
 
 <script>
 
-const BASE = "https://SNGROOMS.github.io/GoPro_Test/";
+// ===============================
+// CONFIG
+// ===============================
+const BASE = "https://sngrooms.github.io/GoPro_Test2/";
 
-const params = new URLSearchParams(window.location.search);
-let img = params.get("img");
-
-if (!img) {
-  document.body.innerHTML = "<h2 style='color:white'>No image provided</h2>";
-  throw new Error("Missing image");
-}
-
-let match = img.match(/frame_(\d+)\.jpg/i);
-let frame = match ? parseInt(match[1], 10) : 1;
-
+// enforce correct image naming
 function pad(n) {
   return String(n).padStart(5, "0");
 }
 
 function frameURL(n) {
-  return BASE + "frame_" + pad(n) + ".jpg";
+  return `${BASE}frame_${pad(n)}.jpg`;
 }
 
-function updateEBState(n) {
+// ===============================
+// GET INITIAL FRAME
+// ===============================
+const params = new URLSearchParams(window.location.search);
+let frame = parseInt(params.get("frame") || "1", 10);
 
-  const url = new URL(window.location.href);
-  url.searchParams.set("frame", n);
-  url.searchParams.set("img", frameURL(n));
+// ===============================
+// HIGH QUALITY RENDER FIX
+// ===============================
 
-  // IMPORTANT: force EB refresh signal
-  window.location.href = url.toString();
-}
+// FORCE HIGH DPI CANVAS (this is HUGE)
+const dpr = window.devicePixelRatio || 1;
 
-// viewer
+// override pannellum sizing behavior
+pannellum.viewer.prototype.getCanvasSize = function () {
+  return {
+    width: this.container.clientWidth * dpr,
+    height: this.container.clientHeight * dpr
+  };
+};
+
+// ===============================
+// VIEWER INIT
+// ===============================
 let viewer = pannellum.viewer("panorama", {
   type: "equirectangular",
-  panorama: img,
+  panorama: frameURL(frame),
+
   autoLoad: true,
-  showControls: true,
-  yaw: 180
+  showControls: false,
+  yaw: 180,
+
+  // QUALITY BOOST SETTINGS
+  hfov: 100,
+  minHfov: 60,
+  maxHfov: 120,
+
+  // prevents internal smoothing artifacts
+  autoRotate: false
 });
 
-document.getElementById("label").innerText = "Frame " + frame;
+document.getElementById("label").innerText = `Frame ${frame}`;
 
-// NAVIGATION
+// ===============================
+// FRAME NAVIGATION (NO RELOAD)
+// ===============================
+
+function loadFrame(n) {
+  if (n < 1) return;
+
+  frame = n;
+  document.getElementById("label").innerText = `Frame ${frame}`;
+
+  const newURL = frameURL(frame);
+
+  // preload image BEFORE swapping (prevents blur flash)
+  const img = new Image();
+  img.src = newURL;
+
+  img.onload = () => {
+    viewer.destroy();
+
+    viewer = pannellum.viewer("panorama", {
+      type: "equirectangular",
+      panorama: newURL,
+      autoLoad: true,
+      showControls: false,
+      yaw: 180,
+      hfov: 100,
+      minHfov: 60,
+      maxHfov: 120
+    });
+  };
+
+  // update URL without reload (IMPORTANT for Experience Builder)
+  const url = new URL(window.location.href);
+  url.searchParams.set("frame", frame);
+  window.history.replaceState({}, "", url.toString());
+}
+
 function next() {
-  updateEBState(frame + 1);
+  loadFrame(frame + 1);
 }
 
 function prev() {
-  if (frame <= 1) return;
-  updateEBState(frame - 1);
+  loadFrame(frame - 1);
 }
 
 </script>
