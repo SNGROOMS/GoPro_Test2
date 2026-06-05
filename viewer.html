@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>360 Viewer - ArcGIS Frame System</title>
+<title>360 Viewer - Stable Frame System</title>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css"/>
 <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
@@ -25,13 +25,14 @@ html, body {
   top: 10px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(0,0,0,0.65);
+  background: rgba(0,0,0,0.7);
   padding: 10px 14px;
   border-radius: 10px;
   z-index: 9999;
   display: flex;
-  align-items: center;
   gap: 10px;
+  align-items: center;
+  font-family: Arial, sans-serif;
 }
 
 button {
@@ -41,7 +42,6 @@ button {
 
 #label {
   color: white;
-  font-family: Arial, sans-serif;
   font-weight: bold;
 }
 </style>
@@ -49,6 +49,7 @@ button {
 
 <body>
 
+<!-- ALWAYS PRESENT (fixes frame 1 issue) -->
 <div id="controls">
   <button onclick="prevFrame()">◀ Prev</button>
   <button onclick="nextFrame()">Next ▶</button>
@@ -65,15 +66,14 @@ button {
 const BASE = "https://sngrooms.github.io/GoPro_Test2/";
 
 // ============================
-// GET FRAME FROM URL
+// GET INPUT FRAME
 // ============================
 const params = new URLSearchParams(window.location.search);
 
-// supports both ?frame=frame_00001 OR ?img=frame_00001.jpg
 let raw = params.get("frame") || params.get("img") || "frame_00001";
 
 // ============================
-// NORMALIZE FRAME
+// PARSE FRAME NUMBER
 // ============================
 function getFrameNumber(str) {
   const match = str.match(/frame_(\d+)/);
@@ -84,8 +84,12 @@ function pad(n) {
   return String(n).padStart(5, "0");
 }
 
-function buildFrameID(n) {
+function makeFrameID(n) {
   return "frame_" + pad(n);
+}
+
+function makeLabel(n) {
+  return "Frame " + n;
 }
 
 // ============================
@@ -95,24 +99,25 @@ let frameNum = getFrameNumber(raw);
 let viewer = null;
 
 // ============================
-// BUILD URL (cache-safe)
+// BUILD IMAGE URL
 // ============================
 function buildURL(frameID) {
   return `${BASE}${frameID}.jpg?cb=${Date.now()}`;
 }
 
 // ============================
-// CORE RENDER FUNCTION (ONLY PATH)
+// CORE RENDER (ONLY PATH)
 // ============================
 function render(n, updateURL = true) {
 
   frameNum = n;
 
-  const frameID = buildFrameID(frameNum);
-  const url = buildURL(frameID);
+  const frameID = makeFrameID(frameNum);
 
-  // always update label FIRST (fixes frame_00001 mismatch bug)
-  document.getElementById("label").innerText = frameID;
+  // IMPORTANT: update label ALWAYS (fixes frame 1 bug)
+  document.getElementById("label").innerText = makeLabel(frameNum);
+
+  const url = buildURL(frameID);
 
   // destroy old viewer safely
   if (viewer) {
@@ -120,7 +125,7 @@ function render(n, updateURL = true) {
     viewer = null;
   }
 
-  // rebuild viewer consistently
+  // rebuild viewer
   setTimeout(() => {
     viewer = pannellum.viewer("panorama", {
       type: "equirectangular",
@@ -134,7 +139,7 @@ function render(n, updateURL = true) {
     });
   }, 30);
 
-  // sync Experience Builder URL (no reload)
+  // sync URL without reload (Experience Builder safe)
   if (updateURL) {
     const u = new URL(window.location.href);
     u.searchParams.set("frame", frameID);
@@ -155,9 +160,13 @@ function prevFrame() {
 }
 
 // ============================
-// INIT (IMPORTANT)
+// INIT (CRITICAL FIX)
 // ============================
-render(frameNum, false);
+function init() {
+  render(frameNum, false);
+}
+
+init();
 
 </script>
 
