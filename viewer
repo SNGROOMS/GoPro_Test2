@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>360 Viewer</title>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css"/>
+<script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+
+<style>
+html, body {
+  margin: 0;
+  height: 100%;
+  background: black;
+  overflow: hidden;
+}
+
+#panorama {
+  width: 100%;
+  height: 100%;
+}
+
+#controls {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.6);
+  padding: 10px;
+  border-radius: 10px;
+  z-index: 9999;
+}
+
+button {
+  margin: 0 5px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+#label {
+  color: white;
+  font-family: Arial;
+  font-weight: bold;
+}
+</style>
+</head>
+
+<body>
+
+<div id="controls">
+  <button onclick="prev()">◀ Prev</button>
+  <button onclick="next()">Next ▶</button>
+  <span id="label"></span>
+</div>
+
+<div id="panorama"></div>
+
+<script>
+
+const BASE = "https://SNGROOMS.github.io/GoPro_Test/";
+
+const params = new URLSearchParams(window.location.search);
+let img = params.get("img");
+
+if (!img) {
+  document.body.innerHTML = "<h2 style='color:white'>No image provided</h2>";
+  throw new Error("Missing image");
+}
+
+let match = img.match(/frame_(\d+)\.jpg/i);
+let frame = match ? parseInt(match[1], 10) : 1;
+
+function pad(n) {
+  return String(n).padStart(5, "0");
+}
+
+function frameURL(n) {
+  return BASE + "frame_" + pad(n) + ".jpg";
+}
+
+function updateEBState(n) {
+
+  const url = new URL(window.location.href);
+  url.searchParams.set("frame", n);
+  url.searchParams.set("img", frameURL(n));
+
+  // IMPORTANT: force EB refresh signal
+  window.location.href = url.toString();
+}
+
+// viewer
+let viewer = pannellum.viewer("panorama", {
+  type: "equirectangular",
+  panorama: img,
+  autoLoad: true,
+  showControls: true,
+  yaw: 180
+});
+
+document.getElementById("label").innerText = "Frame " + frame;
+
+// NAVIGATION
+function next() {
+  updateEBState(frame + 1);
+}
+
+function prev() {
+  if (frame <= 1) return;
+  updateEBState(frame - 1);
+}
+
+</script>
+
+</body>
+</html>
