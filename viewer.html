@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>360 Viewer - ArcGIS Frame System</title>
+<title>360 Viewer - Stable Frame Navigation</title>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css"/>
 <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
@@ -20,106 +20,153 @@ html, body {
   height: 100%;
 }
 
-#hud {
+#controls {
   position: fixed;
   top: 10px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(0,0,0,0.6);
-  color: white;
+  background: rgba(0,0,0,0.65);
   padding: 10px 14px;
   border-radius: 10px;
-  font-family: Arial, sans-serif;
-  font-weight: bold;
   z-index: 9999;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+button {
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+#label {
+  color: white;
+  font-family: Arial;
+  font-weight: bold;
 }
 </style>
 </head>
 
 <body>
 
-<div id="hud">Loading...</div>
+<div id="controls">
+  <button onclick="prevFrame()">◀ Prev</button>
+  <button onclick="nextFrame()">Next ▶</button>
+  <span id="label">Loading...</span>
+</div>
+
 <div id="panorama"></div>
 
 <script>
 
-// ============================
+// =====================
 // CONFIG
-// ============================
+// =====================
 const BASE = "https://sngrooms.github.io/GoPro_Test2/";
 
-// ============================
-// GET FRAME FROM ARCGIS URL
-// ============================
+// =====================
+// GET FRAME
+// =====================
 const params = new URLSearchParams(window.location.search);
 
-// Expected: frame_00001
 let frameID = params.get("frame") || params.get("img");
 
-if (!frameID) {
-  document.body.innerHTML = "<h2 style='color:white'>No frame provided</h2>";
-  throw new Error("Missing frame parameter");
+// HARD FIX: if nothing or bad input, force safe default
+if (!frameID || !frameID.includes("frame_")) {
+  frameID = "frame_00001";
 }
 
-// ============================
-// BUILD IMAGE URL
-// ============================
-function buildImageURL(id) {
-  // ensure extension
-  let url = `${BASE}${id}.jpg`;
-
-  // CRITICAL: cache bust so EB + browser + pannellum NEVER reuse texture
-  return url + "?cb=" + Date.now();
+// =====================
+// FRAME PARSING
+// =====================
+function getFrameNumber(id) {
+  const match = id.match(/frame_(\d+)/);
+  return match ? parseInt(match[1], 10) : 1;
 }
 
-// ============================
-// VIEWER HOLDER
-// ============================
+function pad(n) {
+  return String(n).padStart(5, "0");
+}
+
+let frameNum = getFrameNumber(frameID);
+
+// =====================
+// IMAGE URL BUILDER
+// =====================
+function getImage(n) {
+  const id = "frame_" + pad(n);
+
+  // CRITICAL: cache bust EVERYTHING
+  return {
+    id,
+    url: `${BASE}${id}.jpg?cb=${Date.now()}`
+  };
+}
+
+// =====================
+// VIEWER
+// =====================
 let viewer = null;
 
-// ============================
-// SAFE INIT / REINIT
-// ============================
-function loadViewer(imageUrl, label) {
+// =====================
+// LOAD FUNCTION (SAFE)
+// =====================
+function loadFrame(n) {
 
-  document.getElementById("hud").innerText = label;
+  const frame = getImage(n);
 
-  // destroy previous instance (IMPORTANT for Experience Builder)
+  document.getElementById("label").innerText = frame.id;
+
+  // destroy safely
   if (viewer) {
-    try {
-      viewer.destroy();
-    } catch (e) {}
+    try { viewer.destroy(); } catch (e) {}
     viewer = null;
   }
 
-  // small delay ensures WebGL context fully releases (prevents ghost textures)
+  // small delay prevents WebGL race conditions in Experience Builder
   setTimeout(() => {
 
     viewer = pannellum.viewer("panorama", {
       type: "equirectangular",
-      panorama: imageUrl,
-
+      panorama: frame.url,
       autoLoad: true,
       showControls: false,
-
       yaw: 180,
       hfov: 100,
       minHfov: 60,
-      maxHfov: 120,
-
-      // improves stability in embedded environments
-      dynamicUpdate: false
+      maxHfov: 120
     });
 
   }, 50);
 }
 
-// ============================
-// INIT
-// ============================
-const imageURL = buildImageURL(frameID);
+// =====================
+// NAVIGATION
+// =====================
+function nextFrame() {
+  frameNum++;
+  loadFrame(frameNum);
+  updateURL();
+}
 
-loadViewer(imageURL, frameID);
+function prevFrame() {
+  if (frameNum <= 1) return;
+  frameNum--;
+  loadFrame(frameNum);
+  updateURL();
+}
+
+// keep Experience Builder URL synced (no reload)
+function updateURL() {
+  const url = new URL(window.location.href);
+  url.searchParams.set("frame", "frame_" + pad(frameNum));
+  window.history.replaceState({}, "", url.toString());
+}
+
+// =====================
+// INIT
+// =====================
+loadFrame(frameNum);
 
 </script>
 
