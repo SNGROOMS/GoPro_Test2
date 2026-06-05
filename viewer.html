@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>360 Viewer (High Quality)</title>
+<title>360 Viewer - ArcGIS Frame System</title>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css"/>
 <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
@@ -20,147 +20,106 @@ html, body {
   height: 100%;
 }
 
-/* UI */
-#controls {
+#hud {
   position: fixed;
   top: 10px;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(0,0,0,0.6);
-  padding: 10px;
-  border-radius: 10px;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-button {
-  padding: 8px 12px;
-  cursor: pointer;
-}
-
-#label {
   color: white;
-  font-family: Arial;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-family: Arial, sans-serif;
   font-weight: bold;
+  z-index: 9999;
 }
 </style>
 </head>
 
 <body>
 
-<div id="controls">
-  <button onclick="prev()">◀ Prev</button>
-  <button onclick="next()">Next ▶</button>
-  <span id="label"></span>
-</div>
-
+<div id="hud">Loading...</div>
 <div id="panorama"></div>
 
 <script>
 
-// ===============================
+// ============================
 // CONFIG
-// ===============================
+// ============================
 const BASE = "https://sngrooms.github.io/GoPro_Test2/";
 
-// enforce correct image naming
-function pad(n) {
-  return String(n).padStart(5, "0");
-}
-
-function frameURL(n) {
-  return `${BASE}frame_${pad(n)}.jpg`;
-}
-
-// ===============================
-// GET INITIAL FRAME
-// ===============================
+// ============================
+// GET FRAME FROM ARCGIS URL
+// ============================
 const params = new URLSearchParams(window.location.search);
-let frame = parseInt(params.get("frame") || "1", 10);
 
-// ===============================
-// HIGH QUALITY RENDER FIX
-// ===============================
+// Expected: frame_00001
+let frameID = params.get("frame") || params.get("img");
 
-// FORCE HIGH DPI CANVAS (this is HUGE)
-const dpr = window.devicePixelRatio || 1;
+if (!frameID) {
+  document.body.innerHTML = "<h2 style='color:white'>No frame provided</h2>";
+  throw new Error("Missing frame parameter");
+}
 
-// override pannellum sizing behavior
-pannellum.viewer.prototype.getCanvasSize = function () {
-  return {
-    width: this.container.clientWidth * dpr,
-    height: this.container.clientHeight * dpr
-  };
-};
+// ============================
+// BUILD IMAGE URL
+// ============================
+function buildImageURL(id) {
+  // ensure extension
+  let url = `${BASE}${id}.jpg`;
 
-// ===============================
-// VIEWER INIT
-// ===============================
-let viewer = pannellum.viewer("panorama", {
-  type: "equirectangular",
-  panorama: frameURL(frame),
+  // CRITICAL: cache bust so EB + browser + pannellum NEVER reuse texture
+  return url + "?cb=" + Date.now();
+}
 
-  autoLoad: true,
-  showControls: false,
-  yaw: 180,
+// ============================
+// VIEWER HOLDER
+// ============================
+let viewer = null;
 
-  // QUALITY BOOST SETTINGS
-  hfov: 100,
-  minHfov: 60,
-  maxHfov: 120,
+// ============================
+// SAFE INIT / REINIT
+// ============================
+function loadViewer(imageUrl, label) {
 
-  // prevents internal smoothing artifacts
-  autoRotate: false
-});
+  document.getElementById("hud").innerText = label;
 
-document.getElementById("label").innerText = `Frame ${frame}`;
+  // destroy previous instance (IMPORTANT for Experience Builder)
+  if (viewer) {
+    try {
+      viewer.destroy();
+    } catch (e) {}
+    viewer = null;
+  }
 
-// ===============================
-// FRAME NAVIGATION (NO RELOAD)
-// ===============================
-
-function loadFrame(n) {
-  if (n < 1) return;
-
-  frame = n;
-  document.getElementById("label").innerText = `Frame ${frame}`;
-
-  const newURL = frameURL(frame);
-
-  // preload image BEFORE swapping (prevents blur flash)
-  const img = new Image();
-  img.src = newURL;
-
-  img.onload = () => {
-    viewer.destroy();
+  // small delay ensures WebGL context fully releases (prevents ghost textures)
+  setTimeout(() => {
 
     viewer = pannellum.viewer("panorama", {
       type: "equirectangular",
-      panorama: newURL,
+      panorama: imageUrl,
+
       autoLoad: true,
       showControls: false,
+
       yaw: 180,
       hfov: 100,
       minHfov: 60,
-      maxHfov: 120
+      maxHfov: 120,
+
+      // improves stability in embedded environments
+      dynamicUpdate: false
     });
-  };
 
-  // update URL without reload (IMPORTANT for Experience Builder)
-  const url = new URL(window.location.href);
-  url.searchParams.set("frame", frame);
-  window.history.replaceState({}, "", url.toString());
+  }, 50);
 }
 
-function next() {
-  loadFrame(frame + 1);
-}
+// ============================
+// INIT
+// ============================
+const imageURL = buildImageURL(frameID);
 
-function prev() {
-  loadFrame(frame - 1);
-}
+loadViewer(imageURL, frameID);
 
 </script>
 
